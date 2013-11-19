@@ -1,0 +1,8 @@
+ACLOCAL_AMFLAGS=-I m4
+
+noinst_PROGRAMS = LiftingWaveletTransformTest
+
+liftingwavelettransform_includedir=$(includedir)/liftingwavelettransform
+liftingwavelettransform_include_HEADERS = liftingwavelettransform/LiftingWaveletTransform.hpp
+
+LiftingWaveletTransformTest_SOURCES = test/LiftingWaveletTransformTest.cpp

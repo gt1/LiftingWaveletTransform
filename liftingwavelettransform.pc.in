@@ -1,0 +1,10 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: liftingwavelettransform
+Description: Lifting scheme based 1d wavelet transforms
+Version: @VERSION@
+Libs: 
+Cflags: @LIFTINGWAVELETTRANSFORMCXXFLAGS@ -I${includedir}
