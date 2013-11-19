@@ -39,13 +39,14 @@ struct LiftingWaveletTransform
 	struct MirrorAccessor
 	{
 		typedef _data_iterator data_iterator;
+		typedef typename std::iterator_traits<data_iterator>::value_type value_type;
 		
 		data_iterator const A;
 		int64_t n;
 		
 		MirrorAccessor(data_iterator rA, uint64_t const rn) : A(rA), n(rn) {}
 		
-		typename std::iterator_traits<data_iterator>::value_type operator()(int64_t i, int64_t o) const
+		value_type operator()(int64_t i, int64_t o) const
 		{
 			if ( n == 1 )
 				return A[0];
@@ -332,7 +333,129 @@ struct LiftingWaveletTransform
 		iupdate<data_iterator>(A,n,0.25);
 		ipredict<data_iterator>(A,n,-0.5);
 	}
+	
+	/**
+	 * 5 tap low pass coefficients
+	 **/
+	static std::vector<double> get53LowPassFilter()
+	{
+		std::vector<double> V(5);
+		V[0] = V[4] = -1.0/8.0;
+		V[1] = V[3] =  2.0/8.0;
+		V[2] =         6.0/8.0;
+		return V;
+	}
 
+	/**
+	 * 3 tap high pass coefficients
+	 **/
+	static std::vector<double> get53HighPassFilter()
+	{
+		std::vector<double> V(3);
+		V[0] = V[2] = -1.0/2.0;
+		V[1] =         1.0/1.0;
+		return V;
+	}
+
+	/**
+	 * 9 tap low pass coefficients
+	 **/
+	static std::vector<double> get97LowPassFilter()
+	{
+		std::vector<double> V(9);
+		
+		V[0] = V[8] =  .02674875741080976000;
+		V[1] = V[7] = -.01686411844287495000;
+		V[2] = V[6] = -.07822326652898785000;
+		V[3] = V[5] =  .26686411844287230000;
+		V[4] =         .60294901823635790000;
+		
+		return V;
+	}
+
+	/**
+	 * 7 tap low pass coefficients
+	 **/
+	static std::vector<double> get97HighPassFilter()
+	{
+		std::vector<double> V(7);
+		
+		V[0] = V[6] =  .04563588155712474000;
+		V[1] = V[5] = -.02877176311424978500;
+		V[2] = V[4] = -.29563588155712350000;
+		V[3] =         .55754352622849700000;
+		
+		return V;
+	}
+	
+	/**
+	 * generic convolution function (generating single point at i)
+	 **/
+	template<typename accessor_type>
+	static typename accessor_type::value_type convolve(
+		accessor_type const & M,
+		std::vector<double> const & V,
+		uint64_t const i
+	)
+	{
+		typedef typename accessor_type::value_type value_type;
+		uint64_t const v2 = V.size()/2;
+	
+		value_type cval = value_type();
+		for ( int64_t j = 0; j < V.size(); ++j )
+			cval += M(i,j-v2) * V[j];
+			
+		return cval;
+	}
+	
+	/**
+	 * generic convolution function using additional array
+	 **/
+	template<typename data_iterator>
+	static void convolve(data_iterator const A, uint64_t const n, std::vector<double> const & filter)
+	{
+		typedef typename std::iterator_traits<data_iterator>::value_type value_type;
+		std::vector<value_type> B(n);
+		MirrorAccessor< data_iterator > M(A,n);
+		
+		for ( uint64_t i = 0; i < n; ++i )
+			B[i] = convolve(M,filter,i);
+			
+		std::copy(B.begin(),B.end(),A);
+	}
+	
+	template<typename data_iterator>
+	static std::vector< typename std::iterator_traits<data_iterator>::value_type > filter53Low(data_iterator const A, uint64_t const n)
+	{
+		std::vector< typename std::iterator_traits<data_iterator>::value_type > V(A,A+n);
+		convolve(V.begin(),V.size(),get53LowPassFilter());
+		return V;
+	}
+
+	template<typename data_iterator>
+	static std::vector< typename std::iterator_traits<data_iterator>::value_type > filter53High(data_iterator const A, uint64_t const n)
+	{
+		std::vector< typename std::iterator_traits<data_iterator>::value_type > V(A,A+n);
+		convolve(V.begin(),V.size(),get53HighPassFilter());
+		return V;
+	}
+
+	template<typename data_iterator>
+	static std::vector< typename std::iterator_traits<data_iterator>::value_type > filter97Low(data_iterator const A, uint64_t const n)
+	{
+		std::vector< typename std::iterator_traits<data_iterator>::value_type > V(A,A+n);
+		convolve(V.begin(),V.size(),get97LowPassFilter());
+		return V;
+	}
+
+	template<typename data_iterator>
+	static std::vector< typename std::iterator_traits<data_iterator>::value_type > filter97High(data_iterator const A, uint64_t const n)
+	{
+		std::vector< typename std::iterator_traits<data_iterator>::value_type > V(A,A+n);
+		convolve(V.begin(),V.size(),get97HighPassFilter());
+		return V;
+	}
+	
 	/*
 	 * compare 5/3 filter lifting implementation with convolution based method
 	 */
@@ -348,14 +471,10 @@ struct LiftingWaveletTransform
 		
 		bool ok = true;
 		
+		std::vector<double> const L = get53LowPassFilter();
 		for ( uint64_t i = 0; i < n; i += 2 )
 		{
-			value_type const cval =
-				(M(i,-2) * -1.0/8.0) +
-				(M(i,-1) * 2.0/8.0) +
-				(M(i, 0) * 6.0/8.0) +
-				(M(i, 1) * 2.0/8.0) +
-				(M(i, 2) * -1.0/8.0);
+			value_type cval = convolve(M,L,i);
 			value_type const lval = A[i/2];
 			
 			if ( std::abs(cval-lval) > 1e-4 )
@@ -364,12 +483,11 @@ struct LiftingWaveletTransform
 				ok = false;
 			}
 		}
+
+		std::vector<double> const H = get53HighPassFilter();
 		for ( uint64_t i = 1; i < n; i += 2 )
 		{
-			value_type const cval = 
-				(M(i,-1) *   -1.0/2.0) +
-				(M(i, 0) *   1.0/1.0) +
-				(M(i, 1) *   -1.0/2.0);
+			value_type const cval = convolve(M,H,i);
 			value_type const lval = A[ (n+1)/2 + i/2];
 
 			if ( std::abs(cval-lval) > 1e-4 )
@@ -396,17 +514,11 @@ struct LiftingWaveletTransform
 		MirrorAccessor< typename std::vector<value_type>::const_iterator > M(R.begin(),n);
 
 		bool ok = true;
+
+		std::vector<double> const L = get97LowPassFilter();
 		for ( uint64_t i = 0; i < n; i += 2 )
-		{
-			value_type const cval = ( (M(i,-4) * .02674875741080976000) +
-				(M(i,-3) * -.01686411844287495000) +
-				(M(i,-2) * -.07822326652898785000) +
-				(M(i,-1) * .26686411844287230000) +
-				(M(i, 0) * .60294901823635790000) +
-				(M(i, 1) * .26686411844287230000) +
-				(M(i, 2) * -.07822326652898785000) +
-				(M(i, 3) * -.01686411844287495000) +
-				(M(i, 4) * .02674875741080976000) );
+		{	
+			value_type const cval = convolve(M,L,i);
 			value_type const lval = A[i/2];
 
 			if ( std::abs(cval-lval) > 1e-4 )
@@ -416,16 +528,11 @@ struct LiftingWaveletTransform
 			}
 		}
 
+		std::vector<double> const H = get97HighPassFilter();
+		uint64_t const h2 = H.size()/2;
 		for ( uint64_t i = 1; i < n; i += 2 )
 		{
-			value_type const cval = ( 
-				(M(i,-3) *    .04563588155712474000) +
-				(M(i,-2) *   -.02877176311424978500) +
-				(M(i,-1) *   -.29563588155712350000) +
-				(M(i, 0) *    .55754352622849700000) +
-				(M(i, 1) *   -.29563588155712350000) +
-				(M(i, 2) *   -.02877176311424978500) + 
-				(M(i, 3) *    .04563588155712474000) );
+			value_type const cval = convolve(M,H,i);
 			value_type const lval = A[ (n+1)/2 + i/2];
 			
 			if ( std::abs(cval-lval) > 1e-4 )
