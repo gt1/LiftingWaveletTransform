@@ -456,6 +456,52 @@ struct LiftingWaveletTransform
 		return V;
 	}
 	
+	template<typename data_iterator>
+	static void haar(data_iterator const A, uint64_t const n)
+	{
+		typedef typename std::iterator_traits<data_iterator>::value_type value_type;
+	
+		for ( uint64_t i = 0; i < n; i += 2 )
+		{
+			value_type const a0 = A[i];
+			value_type const a1 = A[i+1];
+			
+			A[i]   = (a0+a1)/2;
+			A[i+1] = (a0-a1)/2;
+		}
+	}
+	
+	template<typename container_type>
+	static container_type haar(container_type const & C)
+	{
+		container_type R(C.begin(),C.end());
+		haar(R.begin(),R.size());
+		return R;
+	}
+
+	template<typename data_iterator>
+	static void ihaar(data_iterator const A, uint64_t const n)
+	{
+		typedef typename std::iterator_traits<data_iterator>::value_type value_type;
+	
+		for ( uint64_t i = 0; i < n; i += 2 )
+		{
+			value_type const a0 = A[i];
+			value_type const a1 = A[i+1];
+			
+			A[i]   = (a0 + a1);
+			A[i+1] = (a0 - a1);
+		}
+	}
+
+	template<typename container_type>
+	static container_type ihaar(container_type const & C)
+	{
+		container_type R(C.begin(),C.end());
+		ihaar(R.begin(),R.size());
+		return R;
+	}
+	
 	/*
 	 * compare 5/3 filter lifting implementation with convolution based method
 	 */
@@ -636,6 +682,16 @@ struct LiftingWaveletTransform
 
 				LiftingWaveletTransform::cdf97(V.begin(),V.size(),true);
 				LiftingWaveletTransform::icdf97(V.begin(),V.size(),false);
+
+				for ( uint64_t j = 0; j < n; ++j )
+					if ( std::abs(V[j]-R[j]) > 1e-4 )
+					{
+						std::cerr << std::abs(V[j]-R[j]) << std::endl;
+						ok = false;
+					}
+
+				LiftingWaveletTransform::haar(V.begin(),V.size());
+				LiftingWaveletTransform::ihaar(V.begin(),V.size());
 
 				for ( uint64_t j = 0; j < n; ++j )
 					if ( std::abs(V[j]-R[j]) > 1e-4 )
