@@ -395,15 +395,16 @@ struct LiftingWaveletTransform
 	static typename accessor_type::value_type convolve(
 		accessor_type const & M,
 		std::vector<double> const & V,
-		uint64_t const i
+		uint64_t const i,
+		int64_t const s = 1
 	)
 	{
 		typedef typename accessor_type::value_type value_type;
-		uint64_t const v2 = V.size()/2;
+		int64_t const v2 = V.size()/2;
 	
 		value_type cval = value_type();
 		for ( int64_t j = 0; j < V.size(); ++j )
-			cval += M(i,j-v2) * V[j];
+			cval += M(i,s*(j-v2)) * V[j];
 			
 		return cval;
 	}
@@ -412,47 +413,47 @@ struct LiftingWaveletTransform
 	 * generic convolution function using additional array
 	 **/
 	template<typename data_iterator>
-	static void convolve(data_iterator const A, uint64_t const n, std::vector<double> const & filter)
+	static void convolve(data_iterator const A, uint64_t const n, std::vector<double> const & filter, int64_t const s = 1)
 	{
 		typedef typename std::iterator_traits<data_iterator>::value_type value_type;
 		std::vector<value_type> B(n);
 		MirrorAccessor< data_iterator > M(A,n);
 		
 		for ( uint64_t i = 0; i < n; ++i )
-			B[i] = convolve(M,filter,i);
+			B[i] = convolve(M,filter,i,s);
 			
 		std::copy(B.begin(),B.end(),A);
 	}
 	
 	template<typename data_iterator>
-	static std::vector< typename std::iterator_traits<data_iterator>::value_type > filter53Low(data_iterator const A, uint64_t const n)
+	static std::vector< typename std::iterator_traits<data_iterator>::value_type > filter53Low(data_iterator const A, uint64_t const n, uint64_t const s = 1)
 	{
 		std::vector< typename std::iterator_traits<data_iterator>::value_type > V(A,A+n);
-		convolve(V.begin(),V.size(),get53LowPassFilter());
+		convolve(V.begin(),V.size(),get53LowPassFilter(),s);
 		return V;
 	}
 
 	template<typename data_iterator>
-	static std::vector< typename std::iterator_traits<data_iterator>::value_type > filter53High(data_iterator const A, uint64_t const n)
+	static std::vector< typename std::iterator_traits<data_iterator>::value_type > filter53High(data_iterator const A, uint64_t const n, uint64_t const s = 1)
 	{
 		std::vector< typename std::iterator_traits<data_iterator>::value_type > V(A,A+n);
-		convolve(V.begin(),V.size(),get53HighPassFilter());
+		convolve(V.begin(),V.size(),get53HighPassFilter(),s);
 		return V;
 	}
 
 	template<typename data_iterator>
-	static std::vector< typename std::iterator_traits<data_iterator>::value_type > filter97Low(data_iterator const A, uint64_t const n)
+	static std::vector< typename std::iterator_traits<data_iterator>::value_type > filter97Low(data_iterator const A, uint64_t const n, uint64_t const s)
 	{
 		std::vector< typename std::iterator_traits<data_iterator>::value_type > V(A,A+n);
-		convolve(V.begin(),V.size(),get97LowPassFilter());
+		convolve(V.begin(),V.size(),get97LowPassFilter(),s);
 		return V;
 	}
 
 	template<typename data_iterator>
-	static std::vector< typename std::iterator_traits<data_iterator>::value_type > filter97High(data_iterator const A, uint64_t const n)
+	static std::vector< typename std::iterator_traits<data_iterator>::value_type > filter97High(data_iterator const A, uint64_t const n, uint64_t const s)
 	{
 		std::vector< typename std::iterator_traits<data_iterator>::value_type > V(A,A+n);
-		convolve(V.begin(),V.size(),get97HighPassFilter());
+		convolve(V.begin(),V.size(),get97HighPassFilter(),s);
 		return V;
 	}
 	
@@ -500,6 +501,20 @@ struct LiftingWaveletTransform
 		container_type R(C.begin(),C.end());
 		ihaar(R.begin(),R.size());
 		return R;
+	}
+
+	template<typename data_iterator>
+	static void haarLow(data_iterator const A, uint64_t const n)
+	{
+		for ( uint64_t i = 0; i+1 < n; i += 1 )
+			A[i] = (A[i]+A[i+1])/2;
+	}
+
+	template<typename data_iterator>
+	static void haarHigh(data_iterator const A, uint64_t const n)
+	{
+		for ( uint64_t i = 0; i+1 < n; i += 1 )
+			A[i] = (A[i]-A[i+1])/2;
 	}
 	
 	/*
@@ -575,7 +590,7 @@ struct LiftingWaveletTransform
 		}
 
 		std::vector<double> const H = get97HighPassFilter();
-		uint64_t const h2 = H.size()/2;
+		// uint64_t const h2 = H.size()/2;
 		for ( uint64_t i = 1; i < n; i += 2 )
 		{
 			value_type const cval = convolve(M,H,i);
